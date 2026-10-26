@@ -1,0 +1,56 @@
+# Runs the service, DynamoDB Local and Redis without installing Python.
+#   docker compose up                                   API on http://localhost:8080 (docs: /docs)
+#   docker compose --profile tests run --rm tests       run the tests
+# Edit the files locally; the API reloads on save.
+x-app: &app
+  build: .
+  image: p2p-transfers-service:local
+  environment:
+    DYNAMODB_URL: http://dynamodb:8000
+    REDIS_URL: redis://redis:6379/0
+    AWS_REGION: us-east-1
+    AWS_ACCESS_KEY_ID: local
+    AWS_SECRET_ACCESS_KEY: local
+  volumes:
+    - .:/app
+
+services:
+  api:
+    <<: *app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080 --reload
+    ports:
+      - "8080:8080"
+    depends_on:
+      dynamodb:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 3s
+      retries: 40
+
+  tests:
+    <<: *app
+    command: pytest
+    profiles: ["tests"]
+    depends_on:
+      dynamodb:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  dynamodb:
+    image: amazon/dynamodb-local:2.5.2
+    command: -jar DynamoDBLocal.jar -inMemory -sharedDb
+    ports:
+      - "8000:8000"
+
+  redis:
+    image: redis:7.4.1-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 30
