@@ -7,12 +7,14 @@ import boto3
 ACCOUNTS = "accounts"
 TRANSFERS = "transfers"
 IDEMPOTENCY = "idempotency_keys"
+DAILY_TOTALS = "daily_totals"
 
 # Table name -> partition key
 TABLES = {
     ACCOUNTS: "user_id",
     TRANSFERS: "transfer_id",
     IDEMPOTENCY: "idempotency_key",
+    DAILY_TOTALS: "total_id",  # "<user_id>#<YYYY-MM-DD>", amount sent that UTC day
 }
 
 # Demo users and their starting balances, in cents.

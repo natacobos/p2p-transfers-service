@@ -1,9 +1,13 @@
+from decimal import Decimal
+
 from pydantic import BaseModel, Field
 
 
 class TransferRequest(BaseModel):
     to_user_id: str = Field(min_length=1)
-    amount: float = Field(gt=0, description="Amount in dollars, for example 12.50")
+    # Decimal, not float: pydantic builds it from the JSON text, so 19.99 stays exactly 19.99.
+    # More than 2 decimal places is rejected rather than silently rounded.
+    amount: Decimal = Field(gt=0, decimal_places=2, description="Amount in dollars, for example 12.50")
 
 
 class TransferResponse(BaseModel):

@@ -1,3 +1,6 @@
+import pytest
+
+from app import cache, db
 from tests.conftest import balance, send
 
 
@@ -54,3 +57,46 @@ def test_request_without_user_is_rejected(client):
     )
 
     assert response.status_code == 401
+
+
+def test_receiver_sees_the_new_balance_right_after_a_transfer(client):
+    assert balance(client, "bob") == "500.00"  # bob checked his balance before the transfer
+
+    send(client, "alice", "bob", 25)
+
+    assert balance(client, "bob") == "525.00"
+    assert balance(client, "alice") == "975.00"
+
+
+def test_balance_comes_from_the_database_not_a_cache(client):
+    # A stale value in Redis (from an old read, or a race with a transfer) must never be shown.
+    cache.client().set("balance:bob", 1)
+
+    assert balance(client, "bob") == "500.00"
+
+
+@pytest.mark.parametrize(
+    "amount, alice_after, bob_after",
+    [
+        (19.99, "980.01", "519.99"),
+        (0.29, "999.71", "500.29"),
+        (1.15, "998.85", "501.15"),
+        (4.35, "995.65", "504.35"),
+    ],
+)
+def test_amounts_are_exact_to_the_cent(client, amount, alice_after, bob_after):
+    response = send(client, "alice", "bob", amount)
+
+    assert response.status_code == 201
+    assert response.json()["amount"] == f"{amount:.2f}"
+    assert balance(client, "alice") == alice_after
+    assert balance(client, "bob") == bob_after
+
+
+@pytest.mark.parametrize("amount", [0.001, 19.999, 0])
+def test_amounts_that_are_not_whole_cents_are_rejected(client, amount):
+    response = send(client, "alice", "bob", amount)
+
+    assert response.status_code == 422
+    assert db.table(db.TRANSFERS).scan(ConsistentRead=True)["Count"] == 0
+    assert balance(client, "alice") == "1000.00"
